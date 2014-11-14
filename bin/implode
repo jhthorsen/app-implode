@@ -9,14 +9,16 @@ use Carton::Builder;
 use Carton::Environment;
 use Carton::Mirror;
 use File::Basename 'basename';
-use File::Find;
+use File::Find ();
+use File::Path ();
 use File::Spec::Functions 'catdir';
 use File::Temp 'tempdir';
 use IO::Compress::Bzip2;
 
 sub DESTROY {
   my $self = shift;
-  chdir $self->[0] if UNIVERSAL::isa($self, 'ARRAY');
+  return chdir $self->[0] if UNIVERSAL::isa($self, 'ARRAY');
+  File::Path::remove_tree($self->{tmpdir}) if $self->{cleanup};
 }
 
 sub cached { shift->{cached} } # TODO
@@ -34,6 +36,8 @@ sub bundle {
   print $OUT $script;
   print $OUT "\n__DATA__\n";
   $self->tar->write(IO::Compress::Bzip2->new($OUT), COMPRESS_GZIP);
+  close $OUT;
+  chmod 0755, $self->{out};
 }
 
 sub chdir {
@@ -49,6 +53,11 @@ sub deps {
   my $builder = Carton::Builder->new(cascade => 1, mirror  => $self->mirror, cpanfile => $env->cpanfile);
   my $index_file;
 
+  if (-e $env->install_path) {
+    die "Cannot build $self->{script}: @{[$env->install_path]} already exists.\n";
+  }
+
+  $self->{cleanup} = 1;
   $index_file = $env->install_path->child("cache/modules/02packages.details.txt");
   $index_file->parent->mkpath;
   $env->snapshot->write_index($index_file);
@@ -71,7 +80,7 @@ BEGIN {
   require File::Spec;
   require File::Temp;
   require IO::Uncompress::Bunzip2;
-  $App::implode::explodedir = File::Temp->newdir(CLEANUP => !$ENV{KEEP_FILES});
+  $App::implode::explodedir = File::Temp->newdir(CLEANUP => !$ENV{APP_IMPLODE_KEEP_FILES});
   warn "[App::implode] cd $App::implode::explodedir; tar -xfz $0\n" if $ENV{APP_IMPLODE_VERBOSE};
   open my $FH, '<', $0;
   my $d = do{ local $/; <$FH> };
@@ -91,7 +100,7 @@ sub tar {
   my $self = shift;
   my $tar = Archive::Tar->new;
   my $guard = $self->chdir($self->{tmpdir});
-  find({ no_chdir => 1, wanted => sub { -f and $tar->add_files($_) } }, qw( bin lib ));
+  File::Find::find({ no_chdir => 1, wanted => sub { -f and $tar->add_files($_) } }, qw( bin lib ));
   return $tar;
 }
 
@@ -111,8 +120,8 @@ sub run {
   -e $self->{out} and die "Outfile '$self->{out}' already exists.\n";
 
   warn sprintf "Building application in %s\n", $self->tmpdir unless $self->silent;
-  #$self->deps;
-  #$self->bundle;
+  $self->deps;
+  $self->bundle;
 
   return 0;
 }

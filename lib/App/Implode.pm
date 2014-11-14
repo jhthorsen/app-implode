@@ -15,7 +15,7 @@ works by using L<Carton> to build all the dependencies and then bundle all the
 deps together into a runable executable.
 
 It is very important that all the dependencies are documented in the
-C<cpanfile|Module::CPANfile>. Example:
+L<cpanfile|Module::CPANfile>. Example C<cpanfile>:
 
   require "Mojolicious" => 5.00;
 
