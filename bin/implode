@@ -106,7 +106,11 @@ sub tar {
   File::Find::find(
     {
       no_chdir => 1,
-      wanted   => sub { -f and $tar->add_files($_) }
+      wanted   => sub {
+        return unless -f;
+        chmod 0700 | (0777 & (stat _)[2]), $_;
+        $tar->add_files($_);
+      },
     },
     qw( bin lib )
   );
