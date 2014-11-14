@@ -22,7 +22,7 @@ sub DESTROY {
 }
 
 sub cached { shift->{cached} }                                                                                    # TODO
-sub mirror { shift->{mirror} || Carton::Mirror->new($ENV{PERL_CARTON_MIRROR} || $Carton::Mirror::DefaultMirror) }
+sub mirror { shift->{mirror} ||= Carton::Mirror->new($ENV{PERL_CARTON_MIRROR} || $Carton::Mirror::DefaultMirror) }
 sub silent { shift->{silent} //= -t STDOUT }
 sub tmpdir { shift->{tmpdir} //= tempdir(CLEANUP => $ENV{IMPLODE_NO_CLEANUP} ? 0 : 1) }
 
@@ -62,11 +62,7 @@ sub deps {
   $index_file->parent->mkpath;
   $env->snapshot->write_index($index_file);
   $builder->index($index_file);
-
-  if ($self->cached) {
-    $builder->mirror(Carton::Mirror->new($env->vendor_cache));
-  }
-
+  $builder->mirror(Carton::Mirror->new($env->vendor_cache)) if $self->cached;
   $builder->install($env->install_path);
   $env->cpanfile->load;
   $env->snapshot->find_installs($env->install_path, $env->cpanfile->requirements);
@@ -74,7 +70,7 @@ sub deps {
 
 sub dir_is_empty {
   my ($self, $dir) = @_;
-  opendir(my $DH, $dir) or return;
+  opendir(my $DH, $dir) or return 1;
   not scalar grep {/\w/} readdir $DH;
 }
 
@@ -106,6 +102,7 @@ sub tar {
   my $self  = shift;
   my $tar   = Archive::Tar->new;
   my $guard = $self->chdir($self->{tmpdir});
+
   File::Find::find(
     {
       no_chdir => 1,
@@ -113,6 +110,7 @@ sub tar {
     },
     qw( bin lib )
   );
+
   return $tar;
 }
 
