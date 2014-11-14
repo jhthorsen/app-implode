@@ -21,17 +21,17 @@ sub DESTROY {
   File::Path::remove_tree($self->{tmpdir}) if $self->{cleanup};
 }
 
-sub cached { shift->{cached} } # TODO
+sub cached { shift->{cached} }                                                                                    # TODO
 sub mirror { shift->{mirror} || Carton::Mirror->new($ENV{PERL_CARTON_MIRROR} || $Carton::Mirror::DefaultMirror) }
-sub silent { shift->{silent} //= -t STDOUT };
+sub silent { shift->{silent} //= -t STDOUT }
 sub tmpdir { shift->{tmpdir} //= tempdir(CLEANUP => $ENV{IMPLODE_NO_CLEANUP} ? 0 : 1) }
 
 sub bundle {
   my $self = shift;
-  my $script = $self->slurp($self->{script});
+  my $script = do { open my $FH, '<', $self->{script}; local $/; <$FH> };
 
   open my $OUT, '>', $self->{out} or die "Could not write $self->{out}: $!\n";
-  print $OUT $script =~ s/^(#!.+?[\r\n]+)//m ? $1: "#!/usr/bin/perl\n";
+  print $OUT $script =~ s/^(#!.+?[\r\n]+)//m ? $1 : "#!/usr/bin/perl\n";
   print $OUT $self->script_header;
   print $OUT $script;
   print $OUT "\n__DATA__\n";
@@ -48,9 +48,9 @@ sub chdir {
 }
 
 sub deps {
-  my $self = shift;
-  my $env = Carton::Environment->build('cpanfile', $self->tmpdir);
-  my $builder = Carton::Builder->new(cascade => 1, mirror  => $self->mirror, cpanfile => $env->cpanfile);
+  my $self    = shift;
+  my $env     = Carton::Environment->build('cpanfile', $self->tmpdir);
+  my $builder = Carton::Builder->new(cascade => 1, mirror => $self->mirror, cpanfile => $env->cpanfile);
   my $index_file;
 
   if (-e $env->install_path) {
@@ -97,24 +97,23 @@ HEADER
 }
 
 sub tar {
-  my $self = shift;
-  my $tar = Archive::Tar->new;
+  my $self  = shift;
+  my $tar   = Archive::Tar->new;
   my $guard = $self->chdir($self->{tmpdir});
-  File::Find::find({ no_chdir => 1, wanted => sub { -f and $tar->add_files($_) } }, qw( bin lib ));
+  File::Find::find(
+    {
+      no_chdir => 1,
+      wanted   => sub { -f and $tar->add_files($_) }
+    },
+    qw( bin lib )
+  );
   return $tar;
-}
-
-sub slurp {
-  my ($self, $file) = @_;
-  open my $FH, '<', $file or die "Could not read $file: $!\n";
-  local $/;
-  readline $FH;
 }
 
 sub run {
   my $self = shift;
 
-  $self->{script} = shift or die "Usage: $0 /path/to/script\n";
+  $self->{script} = shift or die "Usage: implode myapp.pl [path/to/outfile.pl]\n\n";
   $self->{out} = shift || basename $self->{script};
   -r $self->{script} or die "Cannot read '$self->{script}'.\n";
   -e $self->{out} and die "Outfile '$self->{out}' already exists.\n";
@@ -127,4 +126,5 @@ sub run {
 }
 
 exit((bless {})->run(@ARGV)) unless defined wantarray;
+no warnings;
 'App::implode::cli';
