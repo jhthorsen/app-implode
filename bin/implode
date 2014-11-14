@@ -1,0 +1,121 @@
+#!/usr/bin/env perl
+package App::implode::cli;
+use strict;
+use warnings;
+use Archive::Tar;
+use Cwd 'abs_path';
+use Carton ();
+use Carton::Builder;
+use Carton::Environment;
+use Carton::Mirror;
+use File::Basename 'basename';
+use File::Find;
+use File::Spec::Functions 'catdir';
+use File::Temp 'tempdir';
+use IO::Compress::Bzip2;
+
+sub DESTROY {
+  my $self = shift;
+  chdir $self->[0] if UNIVERSAL::isa($self, 'ARRAY');
+}
+
+sub cached { shift->{cached} } # TODO
+sub mirror { shift->{mirror} || Carton::Mirror->new($ENV{PERL_CARTON_MIRROR} || $Carton::Mirror::DefaultMirror) }
+sub silent { shift->{silent} //= -t STDOUT };
+sub tmpdir { shift->{tmpdir} //= tempdir(CLEANUP => $ENV{IMPLODE_NO_CLEANUP} ? 0 : 1) }
+
+sub bundle {
+  my $self = shift;
+  my $script = $self->slurp($self->{script});
+
+  open my $OUT, '>', $self->{out} or die "Could not write $self->{out}: $!\n";
+  print $OUT $script =~ s/^(#!.+?[\r\n]+)//m ? $1: "#!/usr/bin/perl\n";
+  print $OUT $self->script_header;
+  print $OUT $script;
+  print $OUT "\n__DATA__\n";
+  $self->tar->write(IO::Compress::Bzip2->new($OUT), COMPRESS_GZIP);
+}
+
+sub chdir {
+  my $self = shift;
+  my $guard = bless [abs_path], ref($self);
+  chdir $_[0] or die "chdir: $!";
+  $guard;
+}
+
+sub deps {
+  my $self = shift;
+  my $env = Carton::Environment->build('cpanfile', $self->tmpdir);
+  my $builder = Carton::Builder->new(cascade => 1, mirror  => $self->mirror, cpanfile => $env->cpanfile);
+  my $index_file;
+
+  $index_file = $env->install_path->child("cache/modules/02packages.details.txt");
+  $index_file->parent->mkpath;
+  $env->snapshot->write_index($index_file);
+  $builder->index($index_file);
+
+  if ($self->cached) {
+    $builder->mirror(Carton::Mirror->new($env->vendor_cache));
+  }
+
+  $builder->install($env->install_path);
+  $env->cpanfile->load;
+  $env->snapshot->find_installs($env->install_path, $env->cpanfile->requirements);
+}
+
+sub script_header {
+  my $self = shift;
+  return <<'HEADER';
+BEGIN {
+  require Archive::Tar;
+  require File::Spec;
+  require IO::Uncompress::Bunzip2;
+  unshift \@INC,sub{
+    local $Archive::Tar::WARN = 0;
+    my $f = File::Spec->catfile('lib','perl5',$_[1]);
+    my $c = ($main::__EXPLODER__ ||= do {
+      open my $FH,'<',$0;
+      my $data = do{local $/;<$FH>};
+      $data =~ s/^.*\n__DATA__\r?\n//s;
+      my $t = Archive::Tar->new;$t->read(IO::Uncompress::Bunzip2->new(\$data));
+      $t
+    })->get_content($f) || '';
+    return \$c if length $c;
+    return;
+  };
+}
+HEADER
+}
+
+sub tar {
+  my $self = shift;
+  my $tar = Archive::Tar->new;
+  my $guard = $self->chdir($self->{tmpdir});
+  find({ no_chdir => 1, wanted => sub { -f and $tar->add_files($_) } }, qw( bin lib ));
+  return $tar;
+}
+
+sub slurp {
+  my ($self, $file) = @_;
+  open my $FH, '<', $file or die "Could not read $file: $!\n";
+  local $/;
+  readline $FH;
+}
+
+sub run {
+  my $self = shift;
+
+  $self->{script} = shift or die "Usage: $0 /path/to/script\n";
+  $self->{out} = shift || basename $self->{script};
+  -r $self->{script} or die "Cannot read '$self->{script}'.\n";
+  -e $self->{out} and die "Outfile '$self->{out}' already exists.\n";
+
+  warn sprintf "Building application in %s\n", $self->tmpdir unless $self->silent;
+  #$self->deps;
+  #$self->bundle;
+
+  return 0;
+}
+
+exit((bless {})->run(@ARGV)) unless defined wantarray;
+'App::implode::cli';
