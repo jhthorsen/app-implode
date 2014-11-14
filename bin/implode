@@ -34,7 +34,7 @@ sub bundle {
   print $OUT $script =~ s/^(#!.+?[\r\n]+)//m ? $1 : "#!/usr/bin/perl\n";
   print $OUT $self->script_header;
   print $OUT $script;
-  print $OUT "\n__DATA__\n";
+  print $OUT "\n__END__\n";
   $self->tar->write(IO::Compress::Bzip2->new($OUT), COMPRESS_GZIP);
   close $OUT;
   chmod 0755, $self->{out};
@@ -86,7 +86,7 @@ BEGIN {
   warn "[App::implode] cd $App::implode::explodedir; tar -xfz $0\n" if $ENV{APP_IMPLODE_VERBOSE};
   open my $FH, '<', $0;
   my $d = do{ local $/; <$FH> };
-  $d =~ s/^.*\n__DATA__\r?\n//s;
+  $d =~ s/^.*\n__END__\r?\n//s;
   my $tar = Archive::Tar->new;
   $tar->read(IO::Uncompress::Bunzip2->new(\$d));
   $tar->setcwd($App::implode::explodedir);

@@ -25,11 +25,11 @@ L<cpanfile|Module::CPANfile>. Example C<cpanfile>:
   $ cd my-project
   $ implode myapp.pl out.pl
 
-=head1 CAVEATS
+=head1 CAVEAT
 
-You cannot have C<__DATA__> section in your script. The reason for that is
-L<implode|App::Implode> will make a C<tar.gz> of all the required modules and
-put the content of that archive in the C<DATA> section.
+L<App::Implode> will put all the requirements into an bzip2'ed archive, and
+write it into the generated file, in the C<__END__> section. This means that
+you cannot use this section in the source script.
 
 =cut
 
