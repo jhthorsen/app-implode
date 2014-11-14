@@ -53,7 +53,7 @@ sub deps {
   my $builder = Carton::Builder->new(cascade => 1, mirror => $self->mirror, cpanfile => $env->cpanfile);
   my $index_file;
 
-  if (-e $env->install_path) {
+  if (!$self->dir_is_empty($self->tmpdir)) {
     die "Cannot build $self->{script}: @{[$env->install_path]} already exists.\n";
   }
 
@@ -70,6 +70,12 @@ sub deps {
   $builder->install($env->install_path);
   $env->cpanfile->load;
   $env->snapshot->find_installs($env->install_path, $env->cpanfile->requirements);
+}
+
+sub dir_is_empty {
+  my ($self, $dir) = @_;
+  opendir(my $DH, $dir) or return;
+  not scalar grep {/\w/} readdir $DH;
 }
 
 sub script_header {
