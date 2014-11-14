@@ -69,20 +69,20 @@ sub script_header {
 BEGIN {
   require Archive::Tar;
   require File::Spec;
+  require File::Temp;
   require IO::Uncompress::Bunzip2;
-  unshift \@INC,sub{
-    local $Archive::Tar::WARN = 0;
-    my $f = File::Spec->catfile('lib','perl5',$_[1]);
-    my $c = ($main::__EXPLODER__ ||= do {
-      open my $FH,'<',$0;
-      my $data = do{local $/;<$FH>};
-      $data =~ s/^.*\n__DATA__\r?\n//s;
-      my $t = Archive::Tar->new;$t->read(IO::Uncompress::Bunzip2->new(\$data));
-      $t
-    })->get_content($f) || '';
-    return \$c if length $c;
-    return;
-  };
+  $App::implode::explodedir = File::Temp->newdir(CLEANUP => !$ENV{KEEP_FILES});
+  warn "[App::implode] cd $App::implode::explodedir; tar -xfz $0\n" if $ENV{APP_IMPLODE_VERBOSE};
+  open my $FH, '<', $0;
+  my $d = do{ local $/; <$FH> };
+  $d =~ s/^.*\n__DATA__\r?\n//s;
+  my $tar = Archive::Tar->new;
+  $tar->read(IO::Uncompress::Bunzip2->new(\$d));
+  $tar->setcwd($App::implode::explodedir);
+  $tar->extract or die "[App::implode] tar -xfz $0 failed: @{[$tar->error]}";
+  unshift @INC, File::Spec->catdir($App::implode::explodedir, 'lib', 'perl5');
+  $ENV{PATH} = join ':', grep { defined } File::Spec->catdir($App::implode::explodedir, 'bin'), $ENV{PATH};
+  $ENV{PERL5LIB} = join ':', @INC;
 }
 HEADER
 }
