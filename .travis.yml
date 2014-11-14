@@ -6,7 +6,7 @@ perl:
 env:
   - "HARNESS_OPTIONS=j1"
 install:
-  - "cpanm -n Test::Pod Test::Pod::Coverage"
+  - "cpanm -n Test::Pod Test::Pod::Coverage Mojolicious"
   - "cpanm -n --installdeps ."
 notifications:
   email: false

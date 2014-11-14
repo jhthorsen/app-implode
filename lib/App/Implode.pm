@@ -17,8 +17,8 @@ deps to a single executable file.
 It is very important that all the dependencies are documented in a
 L<cpanfile|Module::CPANfile>. Example C<cpanfile>:
 
-  requires "perl", '5.12.0';
-  requires "Mojolicious" => 5.00;
+  requires "perl" => "5.12.0";
+  requires "Mojolicious" => "5.00";
 
 =head1 SYNOPSIS
 
