@@ -79,10 +79,10 @@ sub script_header {
   return <<'HEADER';
 BEGIN {
   require Archive::Tar;
+  require File::Basename;
   require File::Spec;
-  require File::Temp;
   require IO::Uncompress::Bunzip2;
-  $App::implode::explodedir = File::Temp->newdir(CLEANUP => !$ENV{APP_IMPLODE_KEEP_FILES});
+  $App::implode::explodedir = do { $ENV{HOME} ? "$ENV{HOME}/.local/share/app-implode/@{[File::Basename::basename($0)]}" : "" } || do { require File::Temp; File::Temp->newdir(CLEANUP => 1) };
   warn "[App::implode] cd $App::implode::explodedir; tar -xfz $0\n" if $ENV{APP_IMPLODE_VERBOSE};
   open my $FH, '<', $0;
   my $d = do{ local $/; <$FH> };
