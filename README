@@ -1,0 +1,35 @@
+NAME
+    App::Implode - Pack an application into a single runable file
+
+VERSION
+    0.01
+
+DESCRIPTION
+    App::Implode is an alternative to App::FatPacker and App::fatten. It
+    works by using Carton to build all the dependencies and then bundle all
+    the deps to a single executable file.
+
+    It is very important that all the dependencies are documented in a
+    cpanfile. Example "cpanfile":
+
+      requires "perl", '5.12.0';
+      requires "Mojolicious" => 5.00;
+
+SYNOPSIS
+      $ cd my-project
+      $ implode myapp.pl out.pl
+
+CAVEAT
+    App::Implode will put all the requirements into an bzip2'ed archive, and
+    write it into the generated file, in the "__END__" section. This means
+    that you cannot use this section in the source script.
+
+COPYRIGHT AND LICENSE
+    Copyright (C) 2014, Jan Henning Thorsen
+
+    This program is free software, you can redistribute it and/or modify it
+    under the terms of the Artistic License version 2.0.
+
+AUTHOR
+    Jan Henning Thorsen - "jhthorsen@cpan.org"
+
