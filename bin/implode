@@ -97,8 +97,9 @@ sub exploder {
   require File::Spec;
   require IO::Uncompress::Bunzip2;
   sub App::implode::temp::DESTROY { File::Path::remove_tree(${$_[0]}) }
-  $App::implode::explodedir = bless \File::Spec->catdir(File::Spec->tmpdir, "app-implode-$id"), 'App::implode::temp';
-  warn "[App::implode] cd $$App::implode::explodedir; tar -xfz $0\n" if $ENV{APP_IMPLODE_VERBOSE};
+  $App::implode::explodedir
+    = bless \($ENV{APP_EXPLODE_DIR} || File::Spec->catdir(File::Spec->tmpdir, "app-implode-$id")), 'App::implode::temp';
+  warn "[App::implode] cd $$App::implode::explodedir; tar -xfz $0\n" if $ENV{APP_EXPLODE_VERBOSE};
   my $tar = Archive::Tar->new;
   $tar->read(
     IO::Uncompress::Bunzip2->new(
