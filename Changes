@@ -1,6 +1,6 @@
 Changelog for App::Implode
 
-0.02
+0.02     Sat Nov 15 12:34:58 2014
        * Will also include files from ./lib
        * Use fixed directory in /tmp
        * Add support for custom APP_EXPLODE_DIR
