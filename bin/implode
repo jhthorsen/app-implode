@@ -17,7 +17,7 @@ use IO::Compress::Bzip2;
 
 our $PATH = abs_path(__FILE__);
 
-sub W { -f && chmod 0700 | (0777 & (stat _)[2]), $_; }
+sub W { -f && chmod 0600 | (0777 & (stat _)[2]), $_; }
 
 sub DESTROY {
   my $self = shift;
