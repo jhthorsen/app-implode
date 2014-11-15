@@ -25,7 +25,6 @@ sub DESTROY {
   File::Path::remove_tree($self->{tmpdir}) if $self->{cleanup} and $self->{tmpdir};
 }
 
-sub cached { shift->{cached} }                                                                                    # TODO
 sub mirror { shift->{mirror} ||= Carton::Mirror->new($ENV{PERL_CARTON_MIRROR} || $Carton::Mirror::DefaultMirror) }
 sub silent { shift->{silent} //= $ENV{APP_IMPLODE_VERBOSE} ? 0 : -t STDOUT }
 sub tmpdir { shift->{tmpdir} //= tempdir(CLEANUP => $ENV{IMPLODE_NO_CLEANUP} ? 0 : 1) }
@@ -66,22 +65,11 @@ sub code {
 sub deps {
   my $self    = shift;
   my $env     = Carton::Environment->build('cpanfile', $self->tmpdir);
-  my $builder = Carton::Builder->new(cascade => 1, mirror => $self->mirror, cpanfile => $env->cpanfile);
-  my $index_file;
+  my $builder = Carton::Builder->new(mirror => $self->mirror, cpanfile => $env->cpanfile);
 
-  if (!$self->dir_is_empty($self->tmpdir)) {
-    die "Cannot build $self->{script}: @{[$env->install_path]} already exists.\n";
-  }
-
+  $self->dir_is_empty($self->tmpdir) or die "Cannot build $self->{script}: @{[$env->install_path]} already exists.\n";
   $self->{cleanup} = 1;
-  $index_file = $env->install_path->child("cache/modules/02packages.details.txt");
-  $index_file->parent->mkpath;
-  $env->snapshot->write_index($index_file);
-  $builder->index($index_file);
-  $builder->mirror(Carton::Mirror->new($env->vendor_cache)) if $self->cached;
   $builder->install($env->install_path);
-  $env->cpanfile->load;
-  $env->snapshot->find_installs($env->install_path, $env->cpanfile->requirements);
 }
 
 sub dir_is_empty {
