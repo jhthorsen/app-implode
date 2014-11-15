@@ -11,26 +11,29 @@ use Carton::Mirror;
 use File::Basename 'basename';
 use File::Find ();
 use File::Path ();
-use File::Spec::Functions 'catdir';
+use File::Spec::Functions qw( catdir catfile );
 use File::Temp 'tempdir';
 use IO::Compress::Bzip2;
+
+sub W { -f && chmod 0700 | (0777 & (stat _)[2]), $_; }
 
 sub DESTROY {
   my $self = shift;
   return chdir $self->[0] if UNIVERSAL::isa($self, 'ARRAY');
-  File::Path::remove_tree($self->{tmpdir}) if $self->{cleanup};
+  File::Path::remove_tree($self->{tmpdir}) if $self->{cleanup} and $self->{tmpdir};
 }
 
 sub cached { shift->{cached} }                                                                                    # TODO
 sub mirror { shift->{mirror} ||= Carton::Mirror->new($ENV{PERL_CARTON_MIRROR} || $Carton::Mirror::DefaultMirror) }
-sub silent { shift->{silent} //= -t STDOUT }
+sub silent { shift->{silent} //= $ENV{APP_IMPLODE_VERBOSE} ? 0 : -t STDOUT }
 sub tmpdir { shift->{tmpdir} //= tempdir(CLEANUP => $ENV{IMPLODE_NO_CLEANUP} ? 0 : 1) }
 
 sub bundle {
-  my $self = shift;
-  my $script = do { open my $FH, '<', $self->{script}; local $/; <$FH> };
+  my $self   = shift;
+  my $script = $self->slurp($self->{script});
 
   open my $OUT, '>', $self->{out} or die "Could not write $self->{out}: $!\n";
+  warn sprintf "Generating $self->{out} with embedded bzip archive...\n" unless $self->silent;
   print $OUT $script =~ s/^(#!.+?[\r\n]+)//m ? $1 : "#!/usr/bin/perl\n";
   print $OUT $self->script_header;
   print $OUT $script;
@@ -38,12 +41,13 @@ sub bundle {
   $self->tar->write(IO::Compress::Bzip2->new($OUT), COMPRESS_GZIP);
   close $OUT;
   chmod 0755, $self->{out};
+  warn sprintf "$self->{out} is generated.\n" unless $self->silent;
 }
 
 sub chdir {
   my $self = shift;
   my $guard = bless [abs_path], ref($self);
-  chdir $_[0] or die "chdir: $!";
+  chdir $_[0] or die "chdir $_[0]: $!";
   $guard;
 }
 
@@ -98,22 +102,46 @@ BEGIN {
 HEADER
 }
 
+sub slurp {
+  my ($self, $file) = @_;
+  open my $FH, '<', $file or die "Could not read $file: $!\n";
+  local $/;
+  readline $FH;
+}
+
 sub tar {
   my $self  = shift;
   my $tar   = Archive::Tar->new;
-  my $guard = $self->chdir($self->{tmpdir});
+  my $chdir = $self->chdir($self->tmpdir);
 
-  File::Find::find(
-    {
-      no_chdir => 1,
-      wanted   => sub {
-        return unless -f;
-        chmod 0700 | (0777 & (stat _)[2]), $_;
-        $tar->add_files($_);
+  if (my @paths = grep {-d} qw( bin lib )) {
+    File::Find::find(
+      {
+        no_chdir => 1,
+        wanted   => sub {
+          return unless W;
+          warn sprintf "Add @{[catfile $self->{tmpdir}, $_]}\n" unless $self->silent;
+          $tar->add_files($_);
+        },
       },
-    },
-    qw( bin lib )
-  );
+      @paths
+    );
+  }
+
+  undef $chdir;
+  if (my @paths = grep {-d} qw( lib )) {
+    File::Find::find(
+      {
+        no_chdir => 1,
+        wanted   => sub {
+          return unless W and s!lib!lib/perl5!;
+          warn sprintf "Add $_\n" unless $self->silent;
+          $tar->add_data($_, $self->slurp($File::Find::name));
+        },
+      },
+      @paths
+    );
+  }
 
   return $tar;
 }

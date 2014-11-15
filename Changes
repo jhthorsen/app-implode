@@ -1,5 +1,8 @@
 Changelog for App::Implode
 
+0.02
+       * Will also include files from ./lib
+
 0.01     Fri Nov 14 19:50:11 2014
        * Can bundle requirements into a single executable
 
