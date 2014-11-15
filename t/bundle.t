@@ -24,5 +24,8 @@ ok -s $out, "created $out";
 ok -x $out, "can execute $out";
 is system(perl => -c => $out), 0, "can compile $out";
 
+system("head -n 6 $out") if $ENV{HARNESS_IS_VERBOSE};
+ok !-d '/tmp/app-implode-out.pl', '/tmp/app-implode-out.pl was cleaned up';
+
 unlink $out;
 done_testing;

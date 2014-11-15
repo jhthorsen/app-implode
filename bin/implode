@@ -15,6 +15,8 @@ use File::Spec::Functions qw( catdir catfile );
 use File::Temp 'tempdir';
 use IO::Compress::Bzip2;
 
+our $PATH = abs_path(__FILE__);
+
 sub W { -f && chmod 0700 | (0777 & (stat _)[2]), $_; }
 
 sub DESTROY {
@@ -29,15 +31,19 @@ sub silent { shift->{silent} //= $ENV{APP_IMPLODE_VERBOSE} ? 0 : -t STDOUT }
 sub tmpdir { shift->{tmpdir} //= tempdir(CLEANUP => $ENV{IMPLODE_NO_CLEANUP} ? 0 : 1) }
 
 sub bundle {
-  my $self   = shift;
-  my $script = $self->slurp($self->{script});
+  my $self     = shift;
+  my $script   = $self->slurp($self->{script});
+  my $exploder = $self->code('exploder');
+  my $id       = basename $self->{out};
+
+  $exploder =~ s!^sub.*\@_;!BEGIN{my \$id='$id';!s;
+  $exploder =~ s!^\s+!!mg;
+  $exploder =~ s!\n!!g;
 
   open my $OUT, '>', $self->{out} or die "Could not write $self->{out}: $!\n";
   warn sprintf "Generating $self->{out} with embedded bzip archive...\n" unless $self->silent;
   print $OUT $script =~ s/^(#!.+?[\r\n]+)//m ? $1 : "#!/usr/bin/perl\n";
-  print $OUT $self->script_header;
-  print $OUT $script;
-  print $OUT "\n__END__\n";
+  print $OUT $exploder, "\n", $script, "\n__END__\n";
   $self->tar->write(IO::Compress::Bzip2->new($OUT), COMPRESS_GZIP);
   close $OUT;
   chmod 0755, $self->{out};
@@ -49,6 +55,12 @@ sub chdir {
   my $guard = bless [abs_path], ref($self);
   chdir $_[0] or die "chdir $_[0]: $!";
   $guard;
+}
+
+sub code {
+  my ($self, $name) = @_;
+  open my $SELF, '<', $PATH or die "Read $PATH: $!";
+  return join '', grep { /^sub $name/ .. /^\}/ } <$SELF>;
 }
 
 sub deps {
@@ -78,28 +90,30 @@ sub dir_is_empty {
   not scalar grep {/\w/} readdir $DH;
 }
 
-sub script_header {
-  my $self = shift;
-  return <<'HEADER';
-BEGIN {
+sub exploder {
+  my ($self, $id) = @_;
   require Archive::Tar;
-  require File::Basename;
+  require File::Path;
   require File::Spec;
   require IO::Uncompress::Bunzip2;
-  $App::implode::explodedir = do { $ENV{HOME} ? "$ENV{HOME}/.local/share/app-implode/@{[File::Basename::basename($0)]}" : "" } || do { require File::Temp; File::Temp->newdir(CLEANUP => 1) };
-  warn "[App::implode] cd $App::implode::explodedir; tar -xfz $0\n" if $ENV{APP_IMPLODE_VERBOSE};
-  open my $FH, '<', $0;
-  my $d = do{ local $/; <$FH> };
-  $d =~ s/^.*\n__END__\r?\n//s;
+  sub App::implode::temp::DESTROY { File::Path::remove_tree(${$_[0]}) }
+  $App::implode::explodedir = bless \File::Spec->catdir(File::Spec->tmpdir, "app-implode-$id"), 'App::implode::temp';
+  warn "[App::implode] cd $$App::implode::explodedir; tar -xfz $0\n" if $ENV{APP_IMPLODE_VERBOSE};
   my $tar = Archive::Tar->new;
-  $tar->read(IO::Uncompress::Bunzip2->new(\$d));
-  $tar->setcwd($App::implode::explodedir);
+  $tar->read(
+    IO::Uncompress::Bunzip2->new(
+      do {
+        open my $FH, '<', $0;
+        my $m = 0;
+        \join '', grep { $m++ if /^__END__\r?\n/ || $m; $m > 1; } <$FH>;
+        }
+    )
+  );
+  $tar->setcwd($$App::implode::explodedir);
   $tar->extract or die "[App::implode] tar -xfz $0 failed: @{[$tar->error]}";
-  unshift @INC, File::Spec->catdir($App::implode::explodedir, 'lib', 'perl5');
-  $ENV{PATH} = join ':', grep { defined } File::Spec->catdir($App::implode::explodedir, 'bin'), $ENV{PATH};
+  unshift @INC, File::Spec->catdir($$App::implode::explodedir, 'lib', 'perl5');
+  $ENV{PATH} = join ':', grep {defined} File::Spec->catdir($$App::implode::explodedir, 'bin'), $ENV{PATH};
   $ENV{PERL5LIB} = join ':', @INC;
-}
-HEADER
 }
 
 sub slurp {

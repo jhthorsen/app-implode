@@ -2,7 +2,6 @@ use strict;
 use warnings;
 use Cwd;
 use App::Implode;
-use File::Path 'remove_tree';
 use Test::More;
 
 my $script = 'bin/implode';
@@ -28,6 +27,8 @@ my $guard = $script->chdir('t');
 ok !-e $0, 'chdir';
 undef $guard;
 ok -e $0, 'chdir DESTROY';
+
+like $script->code('exploder'), qr{^sub exploder.*IO::Uncompress::Bunzip2.*PERL5LIB}s, 'got exploder';
 
 $script->{tmpdir} = getcwd;
 my $tar = $script->tar;
