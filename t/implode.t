@@ -31,7 +31,7 @@ ok -e $0, 'chdir DESTROY';
 like $script->code('exploder'), qr{^sub exploder.*IO::Uncompress::Bunzip2.*PERL5LIB}s, 'got exploder';
 
 $script->{tmpdir} = getcwd;
-my $tar = $script->tar;
+my $tar = $script->tarball;
 my %files;
 isa_ok($tar, 'Archive::Tar');
 $files{$_} = 1 for $tar->list_files;

@@ -17,8 +17,6 @@ use IO::Compress::Bzip2;
 
 our $PATH = abs_path(__FILE__);
 
-sub W { -f && chmod 0600 | (0777 & (stat _)[2]), $_; }
-
 sub DESTROY {
   my $self = shift;
   return chdir $self->[0] if UNIVERSAL::isa($self, 'ARRAY');
@@ -43,7 +41,7 @@ sub bundle {
   warn sprintf "Generating $self->{out} with embedded bzip archive...\n" if $self->verbose;
   print $OUT $script =~ s/^(#!.+?[\r\n]+)//m ? $1 : "#!/usr/bin/perl\n";
   print $OUT $exploder, "\n", $script, "\n__END__\n";
-  $self->tar->write(IO::Compress::Bzip2->new($OUT), COMPRESS_GZIP);
+  $self->tarball->write(IO::Compress::Bzip2->new($OUT), COMPRESS_GZIP);
   close $OUT;
   chmod 0755, $self->{out};
   warn sprintf "$self->{out} is generated.\n" if $self->verbose;
@@ -112,39 +110,31 @@ sub slurp {
   readline $FH;
 }
 
-sub tar {
+sub tarball {
   my $self  = shift;
-  my $tar   = Archive::Tar->new;
   my $chdir = $self->chdir($self->tmpdir);
+  my $chmod = sub { -f and chmod 0600 | (0777 & (stat _)[2]), $_ };
+  my $files = sub { @_ > 1 and File::Find::find({no_chdir => 1, wanted => shift}, @_) };
+  my $tar   = Archive::Tar->new;
 
-  if (my @paths = grep {-d} qw( bin lib )) {
-    File::Find::find(
-      {
-        no_chdir => 1,
-        wanted   => sub {
-          return unless W;
-          warn sprintf "Add @{[catfile $self->{tmpdir}, $_]}\n" if $self->verbose;
-          $tar->add_files($_);
-        },
-      },
-      @paths
-    );
-  }
+  $files->(
+    sub {
+      return unless $chmod->();
+      warn sprintf "Add @{[catfile $self->{tmpdir}, $_]}\n" if $self->verbose;
+      $tar->add_files($_);
+    },
+    grep {-d} qw( bin lib )
+  );
 
   undef $chdir;
-  if (my @paths = grep {-d} qw( lib )) {
-    File::Find::find(
-      {
-        no_chdir => 1,
-        wanted   => sub {
-          return unless W and s!lib!lib/perl5!;
-          warn sprintf "Add $_\n" if $self->verbose;
-          $tar->add_data($_, $self->slurp($File::Find::name));
-        },
-      },
-      @paths
-    );
-  }
+  $files->(
+    sub {
+      return unless $chmod->() and s!lib!lib/perl5!;
+      warn sprintf "Add $_\n" if $self->verbose;
+      $tar->add_data($_, $self->slurp($File::Find::name));
+    },
+    grep {-d} qw( lib )
+  );
 
   return $tar;
 }
