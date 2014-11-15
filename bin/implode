@@ -26,8 +26,8 @@ sub DESTROY {
 }
 
 sub mirror { shift->{mirror} ||= Carton::Mirror->new($ENV{PERL_CARTON_MIRROR} || $Carton::Mirror::DefaultMirror) }
-sub silent { shift->{silent} //= $ENV{APP_IMPLODE_VERBOSE} ? 0 : -t STDOUT }
 sub tmpdir { shift->{tmpdir} //= tempdir(CLEANUP => $ENV{IMPLODE_NO_CLEANUP} ? 0 : 1) }
+sub verbose { shift->{verbose} //= $ENV{APP_IMPLODE_VERBOSE} ? 0 : -t STDOUT }
 
 sub bundle {
   my $self     = shift;
@@ -40,13 +40,13 @@ sub bundle {
   $exploder =~ s!\n!!g;
 
   open my $OUT, '>', $self->{out} or die "Could not write $self->{out}: $!\n";
-  warn sprintf "Generating $self->{out} with embedded bzip archive...\n" unless $self->silent;
+  warn sprintf "Generating $self->{out} with embedded bzip archive...\n" if $self->verbose;
   print $OUT $script =~ s/^(#!.+?[\r\n]+)//m ? $1 : "#!/usr/bin/perl\n";
   print $OUT $exploder, "\n", $script, "\n__END__\n";
   $self->tar->write(IO::Compress::Bzip2->new($OUT), COMPRESS_GZIP);
   close $OUT;
   chmod 0755, $self->{out};
-  warn sprintf "$self->{out} is generated.\n" unless $self->silent;
+  warn sprintf "$self->{out} is generated.\n" if $self->verbose;
 }
 
 sub chdir {
@@ -123,7 +123,7 @@ sub tar {
         no_chdir => 1,
         wanted   => sub {
           return unless W;
-          warn sprintf "Add @{[catfile $self->{tmpdir}, $_]}\n" unless $self->silent;
+          warn sprintf "Add @{[catfile $self->{tmpdir}, $_]}\n" if $self->verbose;
           $tar->add_files($_);
         },
       },
@@ -138,7 +138,7 @@ sub tar {
         no_chdir => 1,
         wanted   => sub {
           return unless W and s!lib!lib/perl5!;
-          warn sprintf "Add $_\n" unless $self->silent;
+          warn sprintf "Add $_\n" if $self->verbose;
           $tar->add_data($_, $self->slurp($File::Find::name));
         },
       },
@@ -157,7 +157,7 @@ sub run {
   -r $self->{script} or die "Cannot read '$self->{script}'.\n";
   -e $self->{out} and die "Outfile '$self->{out}' already exists.\n";
 
-  warn sprintf "Building application in %s\n", $self->tmpdir unless $self->silent;
+  warn sprintf "Building application in %s\n", $self->tmpdir if $self->verbose;
   $self->deps;
   $self->bundle;
 

@@ -9,7 +9,7 @@ plan skip_all => "Cannot test without $script" unless -x $script;
 
 $script = do $script or die "do $script: $@";
 is $script, 'App::implode::cli', 'implode loaded';
-$script = bless {silent => !$ENV{HARNESS_IS_VERBOSE}}, $script;
+$script = bless {verbose => $ENV{HARNESS_IS_VERBOSE}}, $script;
 
 eval { $script->run; };
 like $@, qr{Usage:}, 'usage';
