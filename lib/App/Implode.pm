@@ -6,7 +6,7 @@ App::Implode - Pack an application into a single runable file
 
 =head1 VERSION
 
-0.02
+0.03
 
 =head1 DESCRIPTION
 
@@ -61,7 +61,7 @@ you cannot use this section in the source script.
 use strict;
 use warnings;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 =head1 COPYRIGHT AND LICENSE
 

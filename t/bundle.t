@@ -1,18 +1,18 @@
 use strict;
 use warnings;
 use Test::More;
-use File::Path 'remove_tree';
 
 my $script = 'bin/implode';
 my $out    = 'out.pl';
-plan skip_all => "Cannot test without $script" unless -x $script;
-plan skip_all => "Cannot test without Mojolicious" unless eval 'require Mojo::Util;1' or $ENV{FORCE_TEST};
+plan skip_all => "TEST_WITH_MOJOLICIOUS=1 is required" unless $ENV{TEST_WITH_MOJOLICIOUS};
+plan skip_all => "Cannot test without $script"         unless -x $script;
 
 $script = do $script or die "do $script: $@";
 $script = bless {verbose => $ENV{HARNESS_IS_VERBOSE}, tmpdir => 'tmp'}, $script;
 
+require File::Path;
 chdir 't/data' or die "Could not chdir t/tmp: $!";
-remove_tree 'tmp';
+File::Path::remove_tree('tmp');
 unlink $out;
 $script = bless {verbose => $ENV{HARNESS_IS_VERBOSE}, tmpdir => 'tmp'}, 'App::implode::cli';
 

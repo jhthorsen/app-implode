@@ -2,7 +2,7 @@ NAME
     App::Implode - Pack an application into a single runable file
 
 VERSION
-    0.02
+    0.03
 
 DESCRIPTION
     App::Implode is an alternative to App::FatPacker and App::fatten. It
