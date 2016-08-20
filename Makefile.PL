@@ -6,7 +6,7 @@ WriteMakefile(
   LICENSE       => 'artistic_2',
   ABSTRACT_FROM => 'lib/App/Implode.pm',
   VERSION_FROM  => 'lib/App/Implode.pm',
-  EXE_FILES     => [qw( bin/implode )],
+  EXE_FILES     => [qw( script/implode )],
   META_MERGE    => {
     resources => {
       bugtracker => 'https://github.com/jhthorsen/app-implode/issues',
@@ -16,5 +16,5 @@ WriteMakefile(
   },
   BUILD_REQUIRES => {'Test::More' => '0.88'},
   PREREQ_PM      => {'Carton'     => '1.0', 'perl' => '5.010001'},
-  test           => {TESTS        => 't/*.t'},
+  test           => {TESTS        => (-e 'META.yml' ? 't/*.t' : 't/*.t xt/*.t')},
 );

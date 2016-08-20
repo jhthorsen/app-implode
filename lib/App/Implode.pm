@@ -1,4 +1,12 @@
 package App::Implode;
+use strict;
+use warnings;
+
+our $VERSION = '0.03';
+
+1;
+
+=encoding utf8
 
 =head1 NAME
 
@@ -56,13 +64,6 @@ L<App::Implode> will put all the requirements into an bzip2'ed archive, and
 write it into the generated file, in the C<__END__> section. This means that
 you cannot use this section in the source script.
 
-=cut
-
-use strict;
-use warnings;
-
-our $VERSION = '0.03';
-
 =head1 COPYRIGHT AND LICENSE
 
 Copyright (C) 2014, Jan Henning Thorsen
@@ -75,5 +76,3 @@ the terms of the Artistic License version 2.0.
 Jan Henning Thorsen - C<jhthorsen@cpan.org>
 
 =cut
-
-1;
