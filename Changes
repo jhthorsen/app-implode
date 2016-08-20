@@ -1,5 +1,9 @@
 Revision history for perl distribution App-Implode
 
+0.04 Not Released
+ - Fix failing unit tests in perl 5.26
+ - Bumping required Mojolicious version
+
 0.03 2014-11-16T14:09:18Z
  - Fix tests: Require higher version of perl and skip bundle.t
 

@@ -1,154 +1,138 @@
 #!/usr/bin/env perl
 package App::implode::cli;
-use strict;
-use warnings;
+use Mojo::Base -strict;
+
 use Archive::Tar;
-use Cwd 'abs_path';
-use Carton ();
-use Carton::Builder;
-use Carton::Environment;
-use Carton::Mirror;
-use File::Basename 'basename';
-use File::Find ();
-use File::Path ();
-use File::Spec::Functions qw( catdir catfile );
-use File::Temp 'tempdir';
-use IO::Compress::Bzip2;
+use File::Which ();
+use Module::CPANfile;
+use Mojo::File 'path';
+use Mojo::JSON qw(false true);
+use Mojo::UserAgent;
 
-our $PATH = abs_path(__FILE__);
+our $IMPLODE_EXE_PATH = path(__FILE__)->to_abs;
 
-sub DESTROY {
-  my $self = shift;
-  return chdir $self->[0] if UNIVERSAL::isa($self, 'ARRAY');
-  File::Path::remove_tree($self->{tmpdir}) if $self->{cleanup} and $self->{tmpdir};
-}
-
-sub mirror { shift->{mirror} ||= Carton::Mirror->new($ENV{PERL_CARTON_MIRROR} || $Carton::Mirror::DefaultMirror) }
-sub tmpdir { shift->{tmpdir} //= tempdir(CLEANUP => $ENV{IMPLODE_NO_CLEANUP} ? 0 : 1) }
 sub verbose { shift->{verbose} //= $ENV{APP_IMPLODE_VERBOSE} ? 0 : -t STDOUT }
 
+sub ua {
+  my $self = shift;
+  $self->{ua} ||= do {
+    my $ua = Mojo::UserAgent->new->max_redirects(3);
+    $ua->proxy->detect;
+    $ua;
+  };
+}
+
+# Create the output executable
 sub bundle {
   my $self     = shift;
-  my $script   = $self->slurp($self->{script});
   my $exploder = $self->code('exploder');
-  my $id       = basename $self->{out};
+  my $id       = path($self->{out})->basename;
 
-  $exploder =~ s!^sub.*\@_;!BEGIN{my \$id='$id';!s;
+  $exploder =~ s!^sub.*\@_;!\{my \$id='$id';!s;
   $exploder =~ s!^\s+!!mg;
   $exploder =~ s!\n!!g;
 
   open my $OUT, '>', $self->{out} or die "Could not write $self->{out}: $!\n";
   warn sprintf "Generating $self->{out} with embedded bzip archive...\n" if $self->verbose;
-  print $OUT $script =~ s/^(#!.+?[\r\n]+)//m ? $1 : "#!/usr/bin/perl\n";
-  print $OUT $exploder, "\n", $script, "\n__END__\n";
-  $self->tarball->write(IO::Compress::Bzip2->new($OUT), COMPRESS_GZIP);
+  print $OUT "#!/usr/bin/env perl\n", $exploder, "\n__END__\n";
+  $self->tarball->write($OUT);    # write tarball after __END__
   close $OUT;
   chmod 0755, $self->{out};
   warn sprintf "$self->{out} is generated.\n" if $self->verbose;
 }
 
-sub chdir {
-  my $self = shift;
-  my $guard = bless [abs_path], ref($self);
-  chdir $_[0] or die "chdir $_[0]: $!";
-  $guard;
-}
-
+# Extract the source code of method inside this file
 sub code {
   my ($self, $name) = @_;
-  open my $SELF, '<', $PATH or die "Read $PATH: $!";
-  return join '', grep { /^sub $name/ .. /^\}/ } <$SELF>;
+  open my $FH, '<', $IMPLODE_EXE_PATH or die "Read $IMPLODE_EXE_PATH\: $!";
+  return join '', grep { /^sub $name/ .. /^\}/ } <$FH>;
 }
 
-sub deps {
+# Download dependencies
+sub download_deps {
   my $self    = shift;
-  my $env     = Carton::Environment->build('cpanfile', $self->tmpdir);
-  my $builder = Carton::Builder->new(mirror => $self->mirror, cpanfile => $env->cpanfile);
+  my $prereqs = Module::CPANfile->load('cpanfile')->prereqs;
+  my $runtime = $prereqs->requirements_for(qw(runtime requires));
 
-  $self->dir_is_empty($self->tmpdir) or die "Cannot build $self->{script}: @{[$env->install_path]} already exists.\n";
-  $self->{cleanup} = 1;
-  $builder->install($env->install_path);
+  for my $m ($runtime->required_modules) {
+    my $v   = $runtime->requirements_for_module($m);
+    my $url = Mojo::URL->new('https://fastapi.metacpan.org/v1/download_url');
+    push @{$url->path}, $m;
+    $url->query(version => $v) if $v;
+    my $res = $self->ua->get($url)->res;
+    die "Failed to fetch metacpan data for $m ($v): @{[$res->error->{message}]}\n" if $res->error;
+    my $meta = $res->json;
+    die "Could not find any match on metacpan for $m ($v)\n" unless $meta->{download_url};
+    my $dist_name = path($meta->{download_url})->basename;
+    my $local_file = path(qw(local implode), $dist_name);
+    $self->{deps}{$dist_name} = $local_file;
+    next if -e $local_file;
+    warn sprintf "Downloading $dist_name to $local_file\n" if $self->verbose;
+    $res = $self->ua->get($meta->{download_url})->res;
+    die "Failed to fetch $url: @{[$res->error->{message}]}\n" if $res->error;
+    path($local_file->dirname)->make_path unless -d path($local_file)->dirname;
+    $local_file->spurt($res->body);
+  }
 }
 
+# Returns true if a directory is empty
 sub dir_is_empty {
   my ($self, $dir) = @_;
   opendir(my $DH, $dir) or return 1;
   not scalar grep {/\w/} readdir $DH;
 }
 
+# This sub is used inside the generated script
 sub exploder {
-  my ($self, $id) = @_;
+  my ($self, $name) = @_;
   require Archive::Tar;
   require File::Path;
   require File::Spec;
-  require IO::Uncompress::Bunzip2;
-  sub App::implode::temp::DESTROY { File::Path::remove_tree(${$_[0]}) }
-  $App::implode::explodedir
-    = bless \($ENV{APP_EXPLODE_DIR} || File::Spec->catdir(File::Spec->tmpdir, "app-implode-$id")), 'App::implode::temp';
-  warn "[App::implode] cd $$App::implode::explodedir; tar -xfz $0\n" if $ENV{APP_EXPLODE_VERBOSE};
+
+  warn "[implode] cd $name; tar -xfz $0\n" if $ENV{APP_EXPLODE_VERBOSE};
+
   my $tar = Archive::Tar->new;
   $tar->read(
-    IO::Uncompress::Bunzip2->new(
-      do {
-        open my $FH, '<', $0;
-        my $m = 0;
-        \join '', grep { $m++ if /^__END__\r?\n/ || $m; $m > 1; } <$FH>;
-        }
-    )
+    do {
+      open my $FH, '<', $0;
+      my $m = 0;
+      \join '', grep { $m++ if /^__END__\r?\n/ || $m; $m > 1; } <$FH>;
+      }
   );
-  $tar->setcwd($$App::implode::explodedir);
-  $tar->extract or die "[App::implode] tar -xfz $0 failed: @{[$tar->error]}";
-  unshift @INC, File::Spec->catdir($$App::implode::explodedir, 'lib', 'perl5');
-  $ENV{PATH} = join ':', grep {defined} File::Spec->catdir($$App::implode::explodedir, 'bin'), $ENV{PATH};
-  $ENV{PERL5LIB} = join ':', @INC;
+
+  $tar->setcwd($name);
+  $tar->extract or die "[implode] Could not extract $0: @{[$tar->error]}";
 }
 
-sub slurp {
-  my ($self, $file) = @_;
-  open my $FH, '<', $file or die "Could not read $file: $!\n";
-  local $/;
-  readline $FH;
-}
-
+# Create a tarball of all the downloaded dists
 sub tarball {
-  my $self  = shift;
-  my $chdir = $self->chdir($self->tmpdir);
-  my $chmod = sub { -f and chmod 0600 | (0777 & (stat _)[2]), $_ };
-  my $files = sub { @_ > 1 and File::Find::find({no_chdir => 1, wanted => shift}, @_) };
-  my $tar   = Archive::Tar->new;
+  my $self = shift;
+  my $tar  = Archive::Tar->new;
+  my ($dist, $meta);
 
-  $files->(
-    sub {
-      return unless $chmod->();
-      warn sprintf "Add @{[catfile $self->{tmpdir}, $_]}\n" if $self->verbose;
-      $tar->add_files($_);
-    },
-    grep {-d} qw( bin lib )
-  );
-
-  undef $chdir;
-  $files->(
-    sub {
-      return unless $chmod->() and s!lib!lib/perl5!;
-      warn sprintf "Add $_\n" if $self->verbose;
-      $tar->add_data($_, $self->slurp($File::Find::name));
-    },
-    grep {-d} qw( lib )
-  );
-
-  return $tar;
+  # TODO: This should probably be more dynamic
+  system "$^X Makefile.PL";
+  system 'make dist';
+  $meta = Mojo::JSON::decode_json(path('MYMETA.json')->slurp);
+  $dist = sprintf '%s-%s.tar.gz', @$meta{qw(name version)};
+  die "Failed to create $dist" unless -e $dist;
+  $tar->add_data(cpanm => path(File::Which::which('cpanm'))->slurp);
+  $tar->add_data($dist, path($dist)->slurp);
+  $tar->add_data($_ => path($self->{deps}{$_})->slurp) for keys %{$self->{deps}};
+  $tar;
 }
 
+# The script starting point
 sub run {
   my $self = shift;
 
+  $self->{deps}   = {};
   $self->{script} = shift or die "Usage: implode myapp.pl [path/to/outfile.pl]\n\n";
-  $self->{out} = shift || basename $self->{script};
+  $self->{out}    = shift || path($self->{script})->basename;
   -r $self->{script} or die "Cannot read '$self->{script}'.\n";
   -e $self->{out} and die "Outfile '$self->{out}' already exists.\n";
 
-  warn sprintf "Building application in %s\n", $self->tmpdir if $self->verbose;
-  $self->deps;
+  $self->download_deps;
   $self->bundle;
 
   return 0;

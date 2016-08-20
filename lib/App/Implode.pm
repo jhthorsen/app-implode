@@ -19,8 +19,8 @@ App::Implode - Pack an application into a single runable file
 =head1 DESCRIPTION
 
 L<App::Implode> is an alternative to L<App::FatPacker> and L<App::fatten>. It
-works by using L<Carton> to build all the dependencies and then bundle all the
-deps to a single executable file.
+works by downloading all the dependencies and then bundle all the deps to a
+single executable file.
 
 It is very important that all the dependencies are documented in a
 L<cpanfile|Module::CPANfile>. Example C<cpanfile>:

@@ -1,18 +1,17 @@
 use strict;
 use warnings;
 use Test::More;
+use File::Spec::Functions qw(catfile rel2abs);
 
-my $script = 'bin/implode';
+my $script = rel2abs(catfile(qw(script implode)));
 my $out    = 'out.pl';
-plan skip_all => "TEST_WITH_MOJOLICIOUS=1 is required" unless $ENV{TEST_WITH_MOJOLICIOUS};
-plan skip_all => "Cannot test without $script"         unless -x $script;
+plan skip_all => "Cannot test without $script" unless -x $script;
 
 $script = do $script or die "do $script: $@";
 $script = bless {verbose => $ENV{HARNESS_IS_VERBOSE}, tmpdir => 'tmp'}, $script;
 
-require File::Path;
 chdir 't/data' or die "Could not chdir t/tmp: $!";
-File::Path::remove_tree('tmp');
+Mojo::File::path('tmp')->remove_tree;
 unlink $out;
 $script = bless {verbose => $ENV{HARNESS_IS_VERBOSE}, tmpdir => 'tmp'}, 'App::implode::cli';
 

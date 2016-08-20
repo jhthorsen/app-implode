@@ -2,9 +2,10 @@ use strict;
 use warnings;
 use Cwd;
 use App::Implode;
+use File::Spec::Functions qw(catfile rel2abs);
 use Test::More;
 
-my $script = 'bin/implode';
+my $script = rel2abs(catfile(qw(script implode)));
 plan skip_all => "Cannot test without $script" unless -x $script;
 
 $script = do $script or die "do $script: $@";
@@ -28,17 +29,20 @@ ok !-e $0, 'chdir';
 undef $guard;
 ok -e $0, 'chdir DESTROY';
 
-like $script->code('exploder'), qr{^sub exploder.*IO::Uncompress::Bunzip2.*PERL5LIB}s, 'got exploder';
+like $script->code('exploder'), qr{^sub exploder.*IO::Uncompress::Bunzip2.*PERL5LIB}s,
+  'got exploder';
 
 $script->{tmpdir} = getcwd;
 my $tar = $script->tarball;
 my %files;
 isa_ok($tar, 'Archive::Tar');
 $files{$_} = 1 for $tar->list_files;
-ok $files{'bin/implode'},              'tar with bin/implode';
+ok $files{'script/implode'},           'tar with script/implode';
 ok $files{'lib/App/Implode.pm'},       'tar with lib/App/Implode.pm';
 ok $files{'lib/perl5/App/Implode.pm'}, 'tar with lib/perl5/App/Implode.pm';
-is length($tar->get_content('lib/App/Implode.pm')), -s $INC{'App/Implode.pm'}, "Implode.pm size @{[-s _]}";
-is $tar->get_content('lib/perl5/App/Implode.pm'), $tar->get_content('lib/App/Implode.pm'), 'Implode.pm content';
+is length($tar->get_content('lib/App/Implode.pm')), -s $INC{'App/Implode.pm'},
+  "Implode.pm size @{[-s _]}";
+is $tar->get_content('lib/perl5/App/Implode.pm'), $tar->get_content('lib/App/Implode.pm'),
+  'Implode.pm content';
 
 done_testing;
