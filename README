@@ -5,7 +5,7 @@ VERSION
     0.03
 
 DESCRIPTION
-    App::Implode is an alternative to App::FatPacker and App::fatten. It
+    App::Implode is an alternative to App::FatPacker and App::depak. It
     works by using Carton to build all the dependencies and then bundle all
     the deps to a single executable file.
 
@@ -51,4 +51,3 @@ COPYRIGHT AND LICENSE
 
 AUTHOR
     Jan Henning Thorsen - "jhthorsen@cpan.org"
-

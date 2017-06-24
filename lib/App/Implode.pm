@@ -10,7 +10,7 @@ App::Implode - Pack an application into a single runable file
 
 =head1 DESCRIPTION
 
-L<App::Implode> is an alternative to L<App::FatPacker> and L<App::fatten>. It
+L<App::Implode> is an alternative to L<App::FatPacker> and L<App::depak>. It
 works by using L<Carton> to build all the dependencies and then bundle all the
 deps to a single executable file.
 
